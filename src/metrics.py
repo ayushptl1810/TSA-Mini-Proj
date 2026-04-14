@@ -36,16 +36,33 @@ def c_index(risk_scores, event) -> float:
     return float(concordant / total) if total > 0 else 0.5
 
 
-def integrated_brier_score(survival_matrix: np.ndarray, y: np.ndarray):
+def integrated_brier_score(
+    survival_matrix: np.ndarray,
+    y: np.ndarray,
+    event_times: np.ndarray | None = None,
+):
     """
-    Integrated Brier Score over all time points.
-    survival_matrix: (N, T) predicted survival probabilities
-    Returns (IBS scalar, per-timestep BS array).
+    Integrated Brier Score using the proper time-varying event indicator I(T_i <= t).
+
+    BS(t) = mean_i [ S_i(t)^2 * I(T_i <= t)  +  (1 - S_i(t))^2 * I(T_i > t) ]
+
+    event_times: (N,) int array — last_obs_hour for dead patients, T-1 for alive.
+                 If None, treats all dead patients as having event at T-1 (legacy).
     """
+    N, T = survival_matrix.shape
+    if event_times is None:
+        # Fallback: dead patients die at T-1, alive patients survive past T-1
+        event_times = np.where(y == 1, T - 1, T - 1)
+
     bs_per_t = []
-    for t in range(survival_matrix.shape[1]):
-        p_t  = 1 - survival_matrix[:, t]
-        bs_t = np.mean((y - p_t) ** 2)
+    for t in range(T):
+        # Died by time t (event observed, and event was before or at t)
+        died_by_t       = ((y == 1) & (event_times <= t)).astype(float)
+        # Still at risk at time t (either alive patient, or dead but event after t)
+        at_risk_past_t  = 1.0 - died_by_t
+
+        S_t  = survival_matrix[:, t]
+        bs_t = np.mean(S_t ** 2 * died_by_t + (1 - S_t) ** 2 * at_risk_past_t)
         bs_per_t.append(bs_t)
     return float(np.mean(bs_per_t)), np.array(bs_per_t)
 
@@ -61,15 +78,16 @@ def evaluate_model(model, loader, horizons: List[int], device, model_type='grud'
       - Integrated Brier Score (survival models)
     """
     model.eval()
-    all_y         = []
-    all_p_global  = []
-    horizon_preds = {h: [] for h in horizons}
-    horizon_true  = {h: [] for h in horizons}
-    survival_risk = []
-    survival_mats = []
-    QUERY_TIMES   = [6, 12, 24, 36]
-    qt_preds      = {t: {h: [] for h in horizons} for t in QUERY_TIMES}
-    qt_true       = {t: {h: [] for h in horizons} for t in QUERY_TIMES}
+    all_y          = []
+    all_p_global   = []
+    all_event_times = []
+    horizon_preds  = {h: [] for h in horizons}
+    horizon_true   = {h: [] for h in horizons}
+    survival_risk  = []
+    survival_mats  = []
+    QUERY_TIMES    = [6, 12, 24, 36]
+    qt_preds       = {t: {h: [] for h in horizons} for t in QUERY_TIMES}
+    qt_true        = {t: {h: [] for h in horizons} for t in QUERY_TIMES}
 
     for batch in loader:
         batch  = {
@@ -80,6 +98,9 @@ def evaluate_model(model, loader, horizons: List[int], device, model_type='grud'
         mask_t = (batch['mask'].sum(-1) > 0)
 
         all_y.extend(batch['y'].cpu().numpy())
+
+        if 'last_obs_hour' in batch:
+            all_event_times.extend(batch['last_obs_hour'].cpu().numpy())
 
         if 'p_global' in out:
             all_p_global.extend(out['p_global'].cpu().numpy())
@@ -129,8 +150,15 @@ def evaluate_model(model, loader, horizons: List[int], device, model_type='grud'
         metrics['c_index'] = c_index(np.array(survival_risk), np.array(all_y))
 
     if survival_mats:
-        S   = np.vstack(survival_mats)
-        ibs, _ = integrated_brier_score(S, np.array(all_y))
+        S    = np.vstack(survival_mats)
+        y_np = np.array(all_y)
+        # event_times: dead → last_obs_hour, alive → T-1
+        if all_event_times:
+            et   = np.array(all_event_times)
+            et_full = np.where(y_np == 1, et, S.shape[1] - 1)
+        else:
+            et_full = None
+        ibs, _ = integrated_brier_score(S, y_np, et_full)
         metrics['IBS'] = ibs
 
     return metrics

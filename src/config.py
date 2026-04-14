@@ -33,7 +33,7 @@ class Config:
     # data
     n_hours:       int   = 48
     n_vars:        int   = 36
-    horizons:      List  = field(default_factory=lambda: [6, 12, 24])
+    horizons:      List  = field(default_factory=lambda: [6])
     # training
     batch_size:    int   = 128
     lr:            float = 1e-3

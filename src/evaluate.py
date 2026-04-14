@@ -19,20 +19,18 @@ plt.switch_backend('Agg')
 
 def print_metric_table(grud_metrics: dict, ode_metrics: dict):
     metrics_to_show = [
-        ('Global AUROC',           'global_auroc'),
-        ('Global AUPRC',           'global_auprc'),
-        ('Global Brier',           'global_brier'),
-        ('H6  AUROC (windowed)',   'h6_auroc'),
-        ('H12 AUROC (windowed)',   'h12_auroc'),
-        ('H24 AUROC (windowed)',   'h24_auroc'),
-        ('H6  AUPRC (windowed)',   'h6_auprc'),
-        ('H12 AUPRC (windowed)',   'h12_auprc'),
-        ('H24 AUPRC (windowed)',   'h24_auprc'),
-        ('Fixed t=12, H6  AUROC',  'ft_t12_h6_auroc'),
-        ('Fixed t=12, H12 AUROC',  'ft_t12_h12_auroc'),
-        ('Fixed t=24, H12 AUROC',  'ft_t24_h12_auroc'),
-        ('C-index',                'c_index'),
-        ('IBS',                    'IBS'),
+        ('Global AUROC',                  'global_auroc'),
+        ('Global AUPRC',                  'global_auprc'),
+        ('Global Brier',                  'global_brier'),
+        ('6h Risk AUROC (windowed)',       'h6_auroc'),
+        ('6h Risk AUPRC (windowed)',       'h6_auprc'),
+        ('6h Risk Brier (windowed)',       'h6_brier'),
+        ('Fixed t=6,  6h Risk AUROC',     'ft_t6_h6_auroc'),
+        ('Fixed t=12, 6h Risk AUROC',     'ft_t12_h6_auroc'),
+        ('Fixed t=24, 6h Risk AUROC',     'ft_t24_h6_auroc'),
+        ('Fixed t=36, 6h Risk AUROC',     'ft_t36_h6_auroc'),
+        ('C-index',                       'c_index'),
+        ('IBS',                           'IBS'),
     ]
     rows = []
     for label, key in metrics_to_show:
@@ -47,14 +45,14 @@ def print_metric_table(grud_metrics: dict, ode_metrics: dict):
 
 def print_full_comparison(lr_metrics: dict, grud_metrics: dict, ode_metrics: dict):
     rows = [
-        ('LR (static mean)',     lr_metrics.get('lr_auroc', np.nan),     lr_metrics.get('lr_auprc', np.nan)),
-        ('GRU-D',                grud_metrics.get('global_auroc', np.nan), grud_metrics.get('global_auprc', np.nan)),
-        ('Latent ODE + DeepHit', ode_metrics.get('global_auroc', np.nan),  ode_metrics.get('global_auprc', np.nan)),
+        ('LR (first-24h mean)',  lr_metrics.get('lr_auroc', np.nan),       lr_metrics.get('lr_auprc', np.nan)),
+        ('GRU-D',                grud_metrics.get('global_auroc', np.nan),  grud_metrics.get('global_auprc', np.nan)),
+        ('Latent ODE + DeepHit', ode_metrics.get('global_auroc', np.nan),   ode_metrics.get('global_auprc', np.nan)),
     ]
     df = pd.DataFrame(rows, columns=['Model', 'AUROC', 'AUPRC'])
     print('\nFull comparison (global mortality prediction):')
     print(df.to_string(index=False, float_format='{:.4f}'.format))
-    print('\n→ Temporal models should outperform static LR if temporal dynamics matter.')
+    print('\n→ LR uses only first 24h — fair comparison with no outcome leakage.')
 
 
 # ── calibration curves ────────────────────────────────────────────────────────
@@ -108,25 +106,35 @@ def plot_calibration(grud_model, ode_model, test_loader, device,
 @torch.no_grad()
 def _collect_survival_matrix(model, loader, device):
     model.eval()
-    surv_list, y_list = [], []
+    surv_list, y_list, et_list = [], [], []
     for batch in loader:
         batch = {k: v.to(device) for k, v in batch.items()}
         out   = model(batch)
         if 'survival' in out:
             surv_list.append(out['survival'].cpu().numpy())
             y_list.extend(batch['y'].cpu().numpy())
+            if 'last_obs_hour' in batch:
+                et_list.extend(batch['last_obs_hour'].cpu().numpy())
     if not surv_list:
-        return None, None
-    return np.vstack(surv_list), np.array(y_list)
+        return None, None, None
+    S = np.vstack(surv_list)
+    y = np.array(y_list)
+    # event_times: dead → last_obs_hour, alive → T-1
+    if et_list:
+        et      = np.array(et_list)
+        et_full = np.where(y == 1, et, S.shape[1] - 1)
+    else:
+        et_full = None
+    return S, y, et_full
 
 
 def plot_ibs_and_survival(ode_model, test_loader, device, n_hours: int = 48,
                            save_path=PLOTS_DIR / 'ibs_survival_mean.png'):
-    S_test, y_s = _collect_survival_matrix(ode_model, test_loader, device)
+    S_test, y_s, et_full = _collect_survival_matrix(ode_model, test_loader, device)
     if S_test is None:
         return
 
-    ibs_score, bs_by_t = integrated_brier_score(S_test, y_s)
+    ibs_score, bs_by_t = integrated_brier_score(S_test, y_s, et_full)
     hours = np.arange(n_hours)
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 4))
@@ -171,7 +179,7 @@ def plot_training_curves(grud_history: list, ode_history: list,
     ]:
         epochs     = [r['epoch'] for r in hist]
         train_loss = [r['train_loss'] for r in hist]
-        val_auroc  = [r.get('val_h12_auroc', float('nan')) for r in hist]
+        val_auroc  = [r.get('val_h6_auroc', float('nan')) for r in hist]
         axes[0].plot(epochs, train_loss, label=label, color=color, lw=2)
         axes[1].plot(epochs, val_auroc,  label=label, color=color, lw=2)
 

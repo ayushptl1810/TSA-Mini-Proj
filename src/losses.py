@@ -48,28 +48,40 @@ def windowed_survival_loss(
 
 
 def deephit_loss(
-    hazard: torch.Tensor,    # (B, T)
-    survival: torch.Tensor,  # (B, T)
-    y: torch.Tensor,         # (B,) binary
+    hazard: torch.Tensor,       # (B, T)
+    survival: torch.Tensor,     # (B, T)
+    y: torch.Tensor,            # (B,) binary
+    event_time: torch.Tensor,   # (B,) long — last obs hour (used when y=1)
     alpha: float = 0.2,
     sigma: float = 0.1,
 ) -> Tuple[torch.Tensor, dict]:
     """
     L_total = L_nll + alpha * L_rank
 
-    Without exact event times:
-      - Dead   (y=1): event at T-1  → -log [S(T-1) * h(T-1)]
-      - Alive  (y=0): censored      → -log S(T-1)
+    Event times:
+      - Dead   (y=1): event at last_obs_hour  → -log [S(t_d) * h(t_d)]
+      - Alive  (y=0): censored at T-1         → -log S(T-1)
     """
-    EPS          = 1e-7
-    log_p_event  = torch.log(survival[:, -1] * hazard[:, -1] + EPS)
-    log_p_censor = torch.log(survival[:, -1] + EPS)
+    EPS = 1e-7
+    B   = y.shape[0]
+    dev = survival.device
+
+    # For dead patients use actual event time; for alive use final timestep
+    t_idx  = torch.where(y.bool(), event_time.to(dev), torch.full((B,), survival.shape[1] - 1, device=dev))
+    arange = torch.arange(B, device=dev)
+
+    surv_at_t = survival[arange, t_idx]
+    haz_at_t  = hazard[arange, t_idx]
+
+    log_p_event  = torch.log(surv_at_t * haz_at_t + EPS)
+    log_p_censor = torch.log(surv_at_t + EPS)
     l_nll = -(y * log_p_event + (1 - y) * log_p_censor).mean()
 
-    risk   = 1 - survival[:, -1]
-    diff   = risk.unsqueeze(1) - risk.unsqueeze(0)
-    eta_ij = y.unsqueeze(1) * (1 - y.unsqueeze(0))
-    l_rank = (eta_ij * torch.exp(-diff / sigma)).sum()
+    # Ranking loss: higher risk for dead vs alive at their respective event times
+    risk    = 1 - surv_at_t
+    diff    = risk.unsqueeze(1) - risk.unsqueeze(0)
+    eta_ij  = y.unsqueeze(1) * (1 - y.unsqueeze(0))
+    l_rank  = (eta_ij * torch.exp(-diff / sigma)).sum()
     n_pairs = eta_ij.sum().clamp(min=1)
     l_rank  = l_rank / n_pairs
 

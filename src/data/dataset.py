@@ -128,17 +128,26 @@ class ICUDataset(Dataset):
         self.wlabels  = torch.from_numpy(stacked).float()
         self.time     = torch.arange(X.shape[1]).float()
 
+        # Last hour with any observation — used as event time in DeepHit loss
+        obs_per_hour = mask[indices].sum(axis=2)  # (N, T)
+        last_obs = np.array([
+            int(np.where(obs_per_hour[i] > 0)[0][-1]) if obs_per_hour[i].sum() > 0 else X.shape[1] - 1
+            for i in range(len(indices))
+        ], dtype=np.int64)
+        self.last_obs_hour = torch.from_numpy(last_obs)
+
     def __len__(self):
         return len(self.idx)
 
     def __getitem__(self, i):
         return {
-            'X'      : self.X[i],
-            'mask'   : self.mask[i],
-            'delta'  : self.delta[i],
-            'y'      : self.y[i],
-            'wlabels': self.wlabels[i],
-            'time'   : self.time,
+            'X'             : self.X[i],
+            'mask'          : self.mask[i],
+            'delta'         : self.delta[i],
+            'y'             : self.y[i],
+            'wlabels'       : self.wlabels[i],
+            'time'          : self.time,
+            'last_obs_hour' : self.last_obs_hour[i],
         }
 
 

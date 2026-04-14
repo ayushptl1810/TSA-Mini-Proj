@@ -84,7 +84,7 @@ def train_ode_epoch(model, loader, optim, cfg: Config, device,
         optim.zero_grad()
         out    = model(batch)
         loss_dh, log_dh = deephit_loss(
-            out['hazard'], out['survival'], batch['y'],
+            out['hazard'], out['survival'], batch['y'], batch['last_obs_hour'],
             alpha=cfg.deephit_alpha, sigma=cfg.deephit_sigma,
         )
         loss_w, log_w = windowed_survival_loss(out, batch['wlabels'], batch['mask'], cfg.horizons)

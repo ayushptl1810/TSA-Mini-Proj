@@ -75,7 +75,7 @@ def main():
         val_metrics = evaluate_model(grud_model, val_loader, CFG.horizons, DEVICE, 'grud')
         grud_sched.step()
 
-        monitor = val_metrics.get('h12_auroc', val_metrics.get('global_auroc', 0.0))
+        monitor = val_metrics.get('h6_auroc', val_metrics.get('global_auroc', 0.0))
         log     = {'epoch': epoch, 'lr': grud_sched.get_last_lr()[0],
                    **train_log, **{f'val_{k}': v for k, v in val_metrics.items()}}
         wandb.log(log)
@@ -83,7 +83,7 @@ def main():
 
         if epoch % 5 == 0 or epoch == 1:
             print(f'E{epoch:03d} | loss={train_log["train_loss"]:.4f}'
-                  f' | val_h12_auroc={val_metrics.get("h12_auroc", float("nan")):.4f}'
+                  f' | val_h6_auroc={val_metrics.get("h6_auroc", float("nan")):.4f}'
                   f' | val_global_auroc={val_metrics.get("global_auroc", float("nan")):.4f}')
 
         if grud_es.step(monitor, grud_model):
@@ -120,7 +120,7 @@ def main():
         val_metrics = evaluate_model(ode_model, val_loader, CFG.horizons, DEVICE, 'ode')
         ode_sched.step()
 
-        monitor = val_metrics.get('h12_auroc', val_metrics.get('c_index', 0.0))
+        monitor = val_metrics.get('h6_auroc', val_metrics.get('c_index', 0.0))
         log     = {'epoch': epoch, 'kl_weight': kl_w,
                    'lr': ode_sched.get_last_lr()[0],
                    **train_log, **{f'val_{k}': v for k, v in val_metrics.items()}}
@@ -131,7 +131,7 @@ def main():
             ibs_str = f", val_IBS={val_metrics.get('IBS', float('nan')):.4f}" if 'IBS' in val_metrics else ''
             print(f'E{epoch:03d} | loss={train_log["train_loss"]:.4f}'
                   f' | kl={train_log.get("train_kl", 0):.4f}'
-                  f' | val_h12_auroc={val_metrics.get("h12_auroc", float("nan")):.4f}'
+                  f' | val_h6_auroc={val_metrics.get("h6_auroc", float("nan")):.4f}'
                   f' | c_index={val_metrics.get("c_index", float("nan")):.4f}'
                   f'{ibs_str}')
 
