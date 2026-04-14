@@ -10,13 +10,17 @@ Usage:
 Expects physionet2012_timeseries.csv in the same directory.
 """
 
+import os
+from pathlib import Path
 import pandas as pd
 import numpy as np
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-INPUT_FILE  = "physionet2012_timeseries.csv"
-PIVOTED_OUT = "physionet2012_pivoted.csv"
-TENSOR_OUT  = "physionet2012_tensor.npz"
+ROOT        = Path(__file__).parents[2]
+DATA_DIR    = ROOT / "data"
+INPUT_FILE  = DATA_DIR / "physionet2012_timeseries.csv"
+PIVOTED_OUT = DATA_DIR / "physionet2012_pivoted.csv"
+TENSOR_OUT  = DATA_DIR / "physionet2012_tensor.npz"
 
 N_HOURS = 48   # ICU window
 BIN_SIZE = 60  # minutes per bin

@@ -1,9 +1,9 @@
 .DS_Store
 predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0/
 predicting-mortality-of-icu-patients-the-physionetcomputing-in-cardiology-challenge-2012-1.0.0.zip
-physionet2012_flat.csv
-physionet2012_pivoted.csv
-physionet2012_summary.xlsx
-physionet2012_tensor.npz
-physionet2012_timeseries.csv
+dataset/
 .env
+wandb
+src/plots
+__pycache__
+venv2/

@@ -18,10 +18,14 @@ import numpy as np
 from pathlib import Path
 
 # ─── CONFIG ─────────────────────────────────────────────────────────────────
+ROOT        = Path(__file__).parents[2]
+DATA_DIR    = ROOT / "data"
+BASE_DATA   = ROOT / "predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0"
+
 SETS = {
-    "a": {"data_dir": "predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0/set-a", "outcomes_file": "predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0/Outcomes-a.txt"},
-    "b": {"data_dir": "predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0/set-b", "outcomes_file": "predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0/Outcomes-b.txt"},
-    "c": {"data_dir": "predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0/set-c", "outcomes_file": "predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0/Outcomes-c.txt"},
+    "a": {"data_dir": BASE_DATA / "set-a", "outcomes_file": BASE_DATA / "Outcomes-a.txt"},
+    "b": {"data_dir": BASE_DATA / "set-b", "outcomes_file": BASE_DATA / "Outcomes-b.txt"},
+    "c": {"data_dir": BASE_DATA / "set-c", "outcomes_file": BASE_DATA / "Outcomes-c.txt"},
 }
 
 # The 37 variables in the dataset
@@ -116,7 +120,7 @@ def load_set(set_name, config):
     data_dir = config["data_dir"]
     outcomes_file = config["outcomes_file"]
 
-    patient_files = sorted(glob.glob(os.path.join(data_dir, "*.txt")))
+    patient_files = sorted(glob.glob(os.path.join(str(data_dir), "*.txt")))
     print(f"\n[Set {set_name.upper()}] Found {len(patient_files)} patient files in '{data_dir}'")
 
     # --- Wide (flat) features
@@ -158,7 +162,7 @@ def main():
     all_long = []
 
     for set_name, config in SETS.items():
-        if not os.path.exists(config["data_dir"]):
+        if not os.path.exists(str(config["data_dir"])):
             print(f"[Set {set_name.upper()}] Directory '{config['data_dir']}' not found — skipping.")
             continue
         flat_df, long_df = load_set(set_name, config)
@@ -180,15 +184,15 @@ def main():
     combined_flat = combined_flat[priority_cols + outcome_cols + other_cols]
 
     # ─── Save CSV outputs
-    combined_flat.to_csv("physionet2012_flat.csv", index=False)
-    print(f"\n✅ Saved flat CSV: physionet2012_flat.csv  ({combined_flat.shape[0]} rows × {combined_flat.shape[1]} cols)")
+    combined_flat.to_csv(DATA_DIR / "physionet2012_flat.csv", index=False)
+    print(f"\n✅ Saved flat CSV: {DATA_DIR / 'physionet2012_flat.csv'}  ({combined_flat.shape[0]} rows × {combined_flat.shape[1]} cols)")
 
-    combined_long.to_csv("physionet2012_timeseries.csv", index=False)
-    print(f"✅ Saved long CSV: physionet2012_timeseries.csv  ({combined_long.shape[0]} rows)")
+    combined_long.to_csv(DATA_DIR / "physionet2012_timeseries.csv", index=False)
+    print(f"✅ Saved long CSV: {DATA_DIR / 'physionet2012_timeseries.csv'}  ({combined_long.shape[0]} rows)")
 
     # ─── Save Excel workbook (summary sheet + both formats)
     print("\nBuilding Excel summary workbook...")
-    with pd.ExcelWriter("physionet2012_summary.xlsx", engine="openpyxl") as writer:
+    with pd.ExcelWriter(DATA_DIR / "physionet2012_summary.xlsx", engine="openpyxl") as writer:
 
         # Sheet 1: Flat (wide) — full feature matrix
         combined_flat.to_excel(writer, sheet_name="Wide_Features", index=False)
@@ -221,7 +225,7 @@ def main():
         # Sheet 4: Long time-series sample (first 5000 rows to keep Excel manageable)
         combined_long.head(5000).to_excel(writer, sheet_name="Timeseries_Sample_5k", index=False)
 
-    print("✅ Saved Excel workbook: physionet2012_summary.xlsx")
+    print(f"✅ Saved Excel workbook: {DATA_DIR / 'physionet2012_summary.xlsx'}")
     print("\n── DONE ─────────────────────────────────────────────────────────")
     print(f"   Total patients : {combined_flat['RecordID'].nunique()}")
     if "In-hospital_death" in combined_flat.columns:
