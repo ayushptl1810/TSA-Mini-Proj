@@ -6,3 +6,4 @@ physionet2012_pivoted.csv
 physionet2012_summary.xlsx
 physionet2012_tensor.npz
 physionet2012_timeseries.csv
+.env
