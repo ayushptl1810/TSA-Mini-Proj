@@ -92,6 +92,10 @@ def main():
 
     grud_es.load_best(grud_model)
     print('Loaded best GRU-D checkpoint.')
+    
+    # Save the best GRU-D model
+    torch.save(grud_model.state_dict(), 'models/grud_best.pth')
+    print('Saved GRU-D weights to models/grud_best.pth')
 
     grud_test_metrics = evaluate_model(grud_model, test_loader, CFG.horizons, DEVICE, 'grud')
     print('\n── GRU-D Test Results ─────────────────────────────────────────────────')
@@ -141,6 +145,10 @@ def main():
 
     ode_es.load_best(ode_model)
     print('Loaded best Latent ODE checkpoint.')
+    
+    # Save the best Latent ODE model
+    torch.save(ode_model.state_dict(), 'models/latent_ode_best.pth')
+    print('Saved Latent ODE weights to models/latent_ode_best.pth')
 
     ode_test_metrics = evaluate_model(ode_model, test_loader, CFG.horizons, DEVICE, 'ode')
     print('\n── Latent ODE Test Results ────────────────────────────────────────────')
